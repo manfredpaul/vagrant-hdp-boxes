@@ -1,0 +1,103 @@
+# Defines our Vagrant environment
+#
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+
+  master_count = 2
+  worker_count = 3
+
+  if Vagrant.has_plugin?("vagrant-vbguest")
+    config.vbguest.no_remote = true
+  end
+
+  if Vagrant.has_plugin?("vagrant-hostmanager")
+    config.hostmanager.enabled = false
+  end
+
+  if Vagrant.has_plugin?("vagrant-hosts")
+    config.vm.provision :hosts do |provisioner|
+      provisioner.autoconfigure = false
+      provisioner.sync_hosts = false
+      provisioner.add_localhost_hostnames = false
+
+      provisioner.imports = ['virtualbox']
+      provisioner.exports = {
+        'virtualbox' => [
+          ['@vagrant_private_networks', ['@vagrant_hostnames']],
+        ],
+      }
+    end
+  end
+
+ # create repo node
+  config.vm.define "repo-hdp3-cluster.local" do |config|
+    config.vm.box = "centos/7"
+
+    config.vm.hostname = "repo-hdp3-cluster.local"
+    config.vm.define "repo-hdp3-cluster.local"
+    config.vm.network :private_network, ip: "192.168.2.10", hostsupdater: "skip"
+    config.vm.provider "virtualbox" do |vb|
+      vb.memory = "512"
+      vb.name = "repo-hdp3-cluster.local"
+
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+
+    config.vm.synced_folder "../../../hdp", "/var/www/html", owner: "apache", group: "apache"
+  end
+
+  # create management node
+  config.vm.define "management-hdp3-cluster.local" do |config|
+    config.vm.box = "centos/7"
+
+    config.vm.hostname = "management-hdp3-cluster.local"
+    config.vm.define "management-hdp3-cluster.local"
+    config.vm.network :private_network, ip: "192.168.2.11", hostsupdater: "skip"
+    config.vm.provider "virtualbox" do |vb|
+      vb.memory = "2048"
+      vb.name = "management-hdp3-cluster.local"
+
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+    end
+  end
+
+  # create master node
+  (1..master_count).each do |i|
+    config.vm.define "master#{i}-hdp3-cluster.local" do |config|
+      config.vm.box = "centos/7"
+
+      config.vm.hostname = "master#{i}-hdp3-cluster.local"
+      config.vm.define "master#{i}-hdp3-cluster.local"
+      config.vm.network :private_network, ip: "192.168.2.2#{i-1}", hostsupdater: "skip"
+      config.vm.provider "virtualbox" do |vb|
+        vb.memory = "1024"
+        vb.name = "master0#{i}-hdp3-cluster.local"
+
+        vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      end
+    end
+  end
+
+  # slave
+  (1..worker_count).each do |i|
+    config.vm.define "worker#{i}-hdp3-cluster.local" do |config|
+      config.vm.box = "centos/7"
+
+      config.vm.hostname = "worker#{i}-hdp3-cluster.local"
+      config.vm.define "worker#{i}-hdp3-cluster.local"
+      config.vm.network :private_network, ip: "192.168.2.3#{i-1}", hostsupdater: "skip"
+      config.vm.provider "virtualbox" do |vb|
+        vb.memory = "2048"
+	      vb.name = "worker0#{i}-hdp3-cluster.local"
+
+        vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      end
+    end
+  end
+
+  #config.vm.provision "base", type: "shell", path: "provision-base.sh"
+  #config.vm.provision "base", type: "shell", path: "ambari-repo.sh"
+  config.vm.provision "base", type: "shell", path: "ambari-agent.sh"
+end
